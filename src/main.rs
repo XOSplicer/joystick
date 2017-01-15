@@ -1,14 +1,26 @@
 extern crate glfw;
 
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::sync::mpsc;
+
 use glfw::{Joystick, JoystickId};
 
 fn main() {
     let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("Could not load GLFW!");
     let joystick = JoystickHandle(glfw.get_joystick(JoystickId::Joystick1));
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        while true {
+            tx.send(joystick.get_data()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+
+        }
+    });
     while true {
-        println!("Present: {:?}", joystick.get_data());
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        println!("{:?}", rx.recv().unwrap());
     }
+
 }
 
 struct JoystickHandle(Joystick);
