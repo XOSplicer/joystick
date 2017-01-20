@@ -1,14 +1,28 @@
 extern crate glfw;
 
-use std::sync::{Arc, Mutex};
+mod gamepad;
+use gamepad::*;
+
 use std::thread;
-use std::thread::JoinHandle;
-use std::time;
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
+use std::time::Duration;
+use glfw::JoystickId;
 
-use glfw::{Joystick, JoystickId, Action};
+fn main() {
+    let glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("Could not load GLFW!");
+    let mut builder = JoystickThreadBuilder::new(glfw,
+                                                 JoystickId::Joystick1,
+                                                 Duration::from_millis(5));
+    builder.on_press(1, Some(Box::new(|| println!("hello 1"))))
+            .on_press(2, Some(Box::new(|| println!("hello 2"))))
+            .on_release(2, None)
+            .on_hold(3, Some(Box::new(|| println!("hello 3"))))
+            .on_move(1, Some(Box::new(|| println!("movement"))));
+    let thread = builder.spin_up();
+    thread::sleep(Duration::from_millis(5000));
+    thread.tear_down().unwrap();
+}
 
+/*
 fn main() {
     let glfw = glfw::init(glfw::FAIL_ON_ERRORS).expect("Could not load GLFW!");
     let joystick = JoystickHandle::new(glfw.get_joystick(JoystickId::Joystick1));
@@ -30,7 +44,6 @@ fn main() {
                 break;
             }
         }
-        thread::sleep(time::Duration::from_millis(10));
     }
 }
 
@@ -42,7 +55,7 @@ struct JoystickHandle {
 struct JoystickThreadHandle {
     thread: JoinHandle<bool>,
     rx: Receiver<Result<JoystickData, String>>,
-    running: Arc<Mutex<bool>>
+    running: Arc<Mutex<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,8 +95,10 @@ impl JoystickHandle {
         let running_orig = Arc::new(Mutex::new(true));
         let running = running_orig.clone();
         let joinhandle = thread::spawn(move || {
+            let mut prev_data = None;
             while *running.lock().unwrap() {
-                tx.send(self.get_data()).unwrap();
+                let data = self.get_data().ok();
+                prev_data = data;
                 thread::sleep(time::Duration::from_millis(5));
             }
             false
@@ -91,7 +106,7 @@ impl JoystickHandle {
         JoystickThreadHandle {
             thread: joinhandle,
             rx: rx,
-            running: running_orig
+            running: running_orig,
         }
     }
 }
@@ -103,3 +118,5 @@ impl JoystickThreadHandle {
     }
 
 }
+
+*/
