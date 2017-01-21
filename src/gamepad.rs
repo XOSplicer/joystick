@@ -8,7 +8,7 @@ use std::collections::hash_map::HashMap;
 
 use glfw::{Glfw, Joystick, JoystickId, Action};
 
-type Callback = Option<Box<(Fn()) + Send>>;
+type Callback<T> = Option<Box<(Fn(T)) + Send>>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JoystickError {
@@ -24,10 +24,10 @@ pub struct JoystickData {
 
 pub struct JoystickThreadBuilder {
     handle: JoystickWrapper,
-    on_press: HashMap<usize, Callback>,
-    on_release: HashMap<usize, Callback>,
-    on_hold: HashMap<usize, Callback>,
-    on_move: HashMap<usize, Callback>,
+    on_press: HashMap<usize, Callback<()>>,
+    on_release: HashMap<usize, Callback<()>>,
+    on_hold: HashMap<usize, Callback<()>>,
+    on_move: HashMap<usize, Callback<f32>>,
     polling: Duration,
 }
 
@@ -55,22 +55,22 @@ impl JoystickThreadBuilder {
         }
     }
 
-    pub fn on_press(&mut self, button: usize, callback: Callback) -> &mut Self {
+    pub fn on_press(&mut self, button: usize, callback: Callback<()>) -> &mut Self {
         self.on_press.insert(button, callback);
         self
     }
 
-    pub fn on_release(&mut self, button: usize, callback: Callback) -> &mut Self {
+    pub fn on_release(&mut self, button: usize, callback: Callback<()>) -> &mut Self {
         self.on_release.insert(button, callback);
         self
     }
 
-    pub fn on_hold(&mut self, button: usize, callback: Callback) -> &mut Self {
+    pub fn on_hold(&mut self, button: usize, callback: Callback<()>) -> &mut Self {
         self.on_hold.insert(button, callback);
         self
     }
 
-    pub fn on_move(&mut self, axis: usize, callback: Callback) -> &mut Self {
+    pub fn on_move(&mut self, axis: usize, callback: Callback<f32>) -> &mut Self {
         self.on_move.insert(axis, callback);
         self
     }
@@ -95,7 +95,7 @@ impl JoystickThreadBuilder {
                         if (diff.0).0 == &Action::Release
                             && (diff.0).1 == &Action::Press {
                             match builder.on_press.get(&diff.1).unwrap_or(&None) {
-                                &Some(ref f) => f(),
+                                &Some(ref f) => f(()),
                                 &None => (),
                             };
                         }
@@ -103,7 +103,7 @@ impl JoystickThreadBuilder {
                         if (diff.0).0 == &Action::Press
                             && (diff.0).1 == &Action::Release {
                             match builder.on_release.get(&diff.1).unwrap_or(&None) {
-                                &Some(ref f) => f(),
+                                &Some(ref f) => f(()),
                                 &None => (),
                             };
                         }
@@ -115,7 +115,7 @@ impl JoystickThreadBuilder {
                                     //((f64, f64), usize)
                         if (diff.0).0 != (diff.0).1 {
                             match builder.on_move.get(&diff.1).unwrap_or(&None) {
-                                &Some(ref f) => f(),
+                                &Some(ref f) => f((diff.0).1.clone()),
                                 &None => (),
                             }
                         }
