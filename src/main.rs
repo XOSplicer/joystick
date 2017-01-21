@@ -12,13 +12,14 @@ fn main() {
     let mut builder = JoystickThreadBuilder::new(glfw,
                                                  JoystickId::Joystick1,
                                                  Duration::from_millis(5));
-    builder.on_press(1, Some(Box::new(|| println!("hello 1"))))
-            .on_press(2, Some(Box::new(|| println!("hello 2"))))
+    builder.on_press(1, Some(Box::new(|| println!("Button 1 pressed"))))
+            .on_release(1, Some(Box::new(|| println!("Button 1 released"))))
+            .on_press(2, Some(Box::new(|| println!("Button 2 pressed"))))
             .on_release(2, None)
-            .on_hold(3, Some(Box::new(|| println!("hello 3"))))
+            .on_hold(3, Some(Box::new(|| println!("Button 3 hold"))))
             .on_move(1, Some(Box::new(|| println!("movement"))));
     let thread = builder.spin_up();
-    thread::sleep(Duration::from_millis(5000));
+    thread::sleep(Duration::from_millis(2000));
     thread.tear_down().unwrap();
 }
 

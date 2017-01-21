@@ -2,10 +2,18 @@ extern crate glfw;
 
 use std::any::Any;
 use std::time::Duration;
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 use std::collections::hash_map::HashMap;
 
 use glfw::{Glfw, Joystick, JoystickId, Action};
+
+type Callback = Option<Box<(Fn()) + Send>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoystickError {
+    NotPresent
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct JoystickData {
@@ -14,10 +22,8 @@ pub struct JoystickData {
     buttons: Vec<Action>,
 }
 
-type Callback = Option<Box<(Fn())>>;
-
 pub struct JoystickThreadBuilder {
-    handle: Joystick,
+    handle: JoystickWrapper,
     on_press: HashMap<usize, Callback>,
     on_release: HashMap<usize, Callback>,
     on_hold: HashMap<usize, Callback>,
@@ -26,8 +32,11 @@ pub struct JoystickThreadBuilder {
 }
 
 pub struct JoystickThread {
-    //thread: JoinHandle<()>,
+    thread: JoinHandle<()>,
+    running: Arc<Mutex<bool>>,
 }
+
+struct JoystickWrapper(Joystick);
 
 impl JoystickData {
 
@@ -37,7 +46,7 @@ impl JoystickThreadBuilder {
 
     pub fn new(glfw: Glfw, id: JoystickId, rate: Duration) -> Self {
         JoystickThreadBuilder  {
-            handle: glfw.get_joystick(id),
+            handle: JoystickWrapper(glfw.get_joystick(id)),
             on_press: HashMap::new(),
             on_release: HashMap::new(),
             on_hold: HashMap::new(),
@@ -67,8 +76,60 @@ impl JoystickThreadBuilder {
     }
 
     pub fn spin_up(self) -> JoystickThread {
+        let running = Arc::new(Mutex::new(true));
+        let running_clone = running.clone();
+        let joinhandle = thread::spawn(move || {
+            let builder = self;
+            let mut prev_data = builder.handle.get_data().ok();
+            // run until torn down
+            while *running.lock().unwrap() {
+                //println!("thread is running");
+                let data = builder.handle.get_data().ok();
+                if data.is_some() && prev_data.is_some() {
+                    // check for button callback actions
+                    for diff in prev_data.clone().unwrap().buttons.iter()
+                                    .zip(data.clone().unwrap().buttons.iter())
+                                    .zip(0_usize..) {
+                                    // ((Action, Action), usize)
+                        //on press
+                        if (diff.0).0 == &Action::Release
+                            && (diff.0).1 == &Action::Press {
+                            match builder.on_press.get(&diff.1).unwrap_or(&None) {
+                                &Some(ref f) => f(),
+                                &None => (),
+                            };
+                        }
+                        //on release
+                        if (diff.0).0 == &Action::Press
+                            && (diff.0).1 == &Action::Release {
+                            match builder.on_release.get(&diff.1).unwrap_or(&None) {
+                                &Some(ref f) => f(),
+                                &None => (),
+                            };
+                        }
+                    }
+                    //check for movement callback actions
+                    for diff in prev_data.clone().unwrap().axes.iter()
+                                    .zip(data.clone().unwrap().axes.iter())
+                                    .zip(0_usize..) {
+                                    //((f64, f64), usize)
+                        if (diff.0).0 != (diff.0).1 {
+                            match builder.on_move.get(&diff.1).unwrap_or(&None) {
+                                &Some(ref f) => f(),
+                                &None => (),
+                            }
+                        }
+                    }
+                }
+                prev_data = data;
+                thread::sleep(builder.polling);
+            }
+            println!("thread is over");
+            ()
+        });
         JoystickThread {
-
+            thread: joinhandle,
+            running: running_clone,
         }
     }
 
@@ -77,6 +138,27 @@ impl JoystickThreadBuilder {
 impl JoystickThread {
 
     pub fn tear_down(self) -> Result<(), Box<Any + Send + 'static>> {
-        Ok(())
+        *self.running.lock().unwrap() = false;
+        self.thread.join()
+    }
+
+}
+
+impl JoystickWrapper {
+    fn get_data(&self) -> Result<JoystickData, JoystickError> {
+        match self.0.is_present() {
+            true => Ok(JoystickData {
+                    name: self.0.get_name(),
+                    axes: self.0.get_axes(),
+                    buttons: self.0.get_buttons()
+                                    .iter().map(|&x| match x {
+                                        0 => Action::Release,
+                                        1 => Action::Press,
+                                        2 => Action::Repeat,
+                                        _ => unreachable!()
+                                    }).collect()
+            }),
+            false => Err(JoystickError::NotPresent)
+        }
     }
 }
