@@ -1,7 +1,7 @@
 extern crate glfw;
 
-mod gamepad;
-use gamepad::*;
+mod joystick;
+use joystick::*;
 
 use std::thread;
 use std::time::Duration;
